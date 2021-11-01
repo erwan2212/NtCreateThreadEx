@@ -15,6 +15,8 @@ const
 
   ProcessBasicInformation=0;
 
+  FileDispositionInformation= 13;
+
   PS_INHERIT_HANDLES =4;
 
     NtCurrentProcess = HANDLE(-1); //$FFFFFFFF;
@@ -216,6 +218,24 @@ end;
  end;
  PPEB=^PEB;
 
+ _IO_STATUS_BLOCK = record
+    //union {
+    Status: NTSTATUS;
+    //    PVOID Pointer;
+    //}
+    Information: ULONG_PTR;
+  end;
+  IO_STATUS_BLOCK = _IO_STATUS_BLOCK;
+  PIO_STATUS_BLOCK = ^IO_STATUS_BLOCK;
+  TIoStatusBlock = IO_STATUS_BLOCK;
+  PIoStatusBlock = ^TIoStatusBlock;
+
+  _FILE_DISPOSITION_INFORMATION = record
+  DeleteFile:BOOLEAN;
+  end;
+  FILE_DISPOSITION_INFORMATION=_FILE_DISPOSITION_INFORMATION;
+  PFILE_DISPOSITION_INFORMATION=^FILE_DISPOSITION_INFORMATION;
+
 
    function NtSetInformationProcess(
       ProcessHandle:HANDLE;
@@ -223,7 +243,6 @@ end;
      ProcessInformation:pointer;
       ProcessInformationLength:ULONG
     ): NTSTATUS; stdcall; external 'ntdll.dll';
-
 
 function  NtOpenProcess(
          ProcessHandle : PHANDLE;
@@ -269,6 +288,14 @@ function  NtOpenProcess(
    ): NTSTATUS; stdcall;  external 'ntdll.dll';
 
    function NtRollbackTransaction(TransactionHandle:HANDLE;flag:boolean): NTSTATUS;  stdcall; external 'ntdll.dll';
+
+   function  NtSetInformationFile(
+       FileHandle : HANDLE;
+       IoStatusBlock : PIO_STATUS_BLOCK;
+       FileInformation : PVOID;
+       FileInformationLength : ULONG;
+       FileInformationClass : dword //FILE_INFORMATION_CLASS
+     ): NTSTATUS; stdcall;  external 'ntdll.dll';
 
    function NtCreateThreadEx(
      ThreadHandle:PHANDLE;

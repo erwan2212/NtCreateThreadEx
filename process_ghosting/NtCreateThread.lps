@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="10"/>
+    <BuildModes Active="Default"/>
+    <Units Count="7">
+      <Unit0>
+        <Filename Value="NtCreateThread.pas"/>
+        <IsPartOfProject Value="True"/>
+        <IsVisibleTab Value="True"/>
+        <TopLine Value="197"/>
+        <CursorPos X="70" Y="211"/>
+        <UsageCount Value="205"/>
+        <Loaded Value="True"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="ntdll.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="220"/>
+        <CursorPos X="31" Y="236"/>
+        <UsageCount Value="236"/>
+        <Loaded Value="True"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="C:\FPC\3.0.0\source\rtl\win\wininc\func.inc"/>
+        <EditorIndex Value="6"/>
+        <TopLine Value="77"/>
+        <CursorPos X="10" Y="91"/>
+        <UsageCount Value="139"/>
+        <Loaded Value="True"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="C:\FPC\3.0.0\source\rtl\win\wininc\defines.inc"/>
+        <EditorIndex Value="5"/>
+        <TopLine Value="4439"/>
+        <CursorPos X="6" Y="4453"/>
+        <UsageCount Value="138"/>
+        <Loaded Value="True"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="C:\FPC\3.0.0\source\rtl\win\wininc\struct.inc"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="8132"/>
+        <CursorPos X="3" Y="8146"/>
+        <UsageCount Value="136"/>
+        <Loaded Value="True"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="C:\FPC\3.0.0\source\rtl\inc\systemh.inc"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="325"/>
+        <CursorPos X="3" Y="339"/>
+        <UsageCount Value="117"/>
+        <Loaded Value="True"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="C:\FPC\3.0.0\source\rtl\win\wininc\base.inc"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="179"/>
+        <CursorPos X="6" Y="193"/>
+        <UsageCount Value="117"/>
+        <Loaded Value="True"/>
+      </Unit6>
+    </Units>
+    <JumpHistory Count="30" HistoryIndex="29">
+      <Position1>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="63" Column="12" TopLine="59"/>
+      </Position1>
+      <Position2>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="53" Column="28" TopLine="48"/>
+      </Position2>
+      <Position3>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="84" Column="28" TopLine="69"/>
+      </Position3>
+      <Position4>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="67" Column="46" TopLine="49"/>
+      </Position4>
+      <Position5>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="51" Column="60" TopLine="39"/>
+      </Position5>
+      <Position6>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="38" Column="41" TopLine="15"/>
+      </Position6>
+      <Position7>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="55" Column="36" TopLine="41"/>
+      </Position7>
+      <Position8>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="193" Column="28" TopLine="172"/>
+      </Position8>
+      <Position9>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="68" Column="35" TopLine="44"/>
+      </Position9>
+      <Position10>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="67" Column="22" TopLine="45"/>
+      </Position10>
+      <Position11>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="175" Column="27" TopLine="168"/>
+      </Position11>
+      <Position12>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="130" TopLine="126"/>
+      </Position12>
+      <Position13>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="59" Column="31" TopLine="50"/>
+      </Position13>
+      <Position14>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="176" Column="18" TopLine="157"/>
+      </Position14>
+      <Position15>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="192" Column="48" TopLine="168"/>
+      </Position15>
+      <Position16>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="151" Column="47" TopLine="140"/>
+      </Position16>
+      <Position17>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="400" Column="31" TopLine="375"/>
+      </Position17>
+      <Position18>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="401" Column="20" TopLine="375"/>
+      </Position18>
+      <Position19>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="154" Column="36" TopLine="140"/>
+      </Position19>
+      <Position20>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="213" Column="46" TopLine="198"/>
+      </Position20>
+      <Position21>
+        <Filename Value="ntdll.pas"/>
+        <Caret Line="278" Column="50" TopLine="254"/>
+      </Position21>
+      <Position22>
+        <Filename Value="ntdll.pas"/>
+        <Caret Line="229" Column="36" TopLine="206"/>
+      </Position22>
+      <Position23>
+        <Filename Value="ntdll.pas"/>
+        <Caret Line="234" Column="30" TopLine="226"/>
+      </Position23>
+      <Position24>
+        <Filename Value="ntdll.pas"/>
+        <Caret Line="289" Column="37" TopLine="275"/>
+      </Position24>
+      <Position25>
+        <Filename Value="ntdll.pas"/>
+        <Caret Line="18" Column="34" TopLine="4"/>
+      </Position25>
+      <Position26>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="182" Column="35" TopLine="163"/>
+      </Position26>
+      <Position27>
+        <Filename Value="ntdll.pas"/>
+        <Caret Line="236" Column="62" TopLine="211"/>
+      </Position27>
+      <Position28>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="216" Column="62" TopLine="200"/>
+      </Position28>
+      <Position29>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="220" Column="19" TopLine="209"/>
+      </Position29>
+      <Position30>
+        <Filename Value="NtCreateThread.pas"/>
+        <Caret Line="211" Column="46" TopLine="197"/>
+      </Position30>
+    </JumpHistory>
+  </ProjectSession>
+</CONFIG>
