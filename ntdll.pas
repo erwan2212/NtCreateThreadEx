@@ -11,6 +11,8 @@ const
   ViewShare = 1;
   ViewUnmap = 2;
 
+  ProcessImageFileName = 27;
+
   ProcessBasicInformation=0;
 
   PS_INHERIT_HANDLES =4;
@@ -215,6 +217,14 @@ end;
  PPEB=^PEB;
 
 
+   function NtSetInformationProcess(
+      ProcessHandle:HANDLE;
+      ProcessInformationClass:dword;
+     ProcessInformation:pointer;
+      ProcessInformationLength:ULONG
+    ): NTSTATUS; stdcall; external 'ntdll.dll';
+
+
 function  NtOpenProcess(
          ProcessHandle : PHANDLE;
          DesiredAccess : ACCESS_MASK;
@@ -334,7 +344,18 @@ function  NtOpenProcess(
          Flags:ULONG // pass RTL_USER_PROC_PARAMS_NORMALIZED to keep parameters normalized
    ): NTSTATUS; stdcall; external 'ntdll.dll';
 
+   function RtlDestroyProcessParameters(pProcessParameters:PVOID): NTSTATUS; stdcall; external 'ntdll.dll';
+
       procedure RtlInitUnicodeString(DestinationString: PUNICODE_STRING; SourceString: PWSTR); stdcall; external 'ntdll.dll';
+
+      //https://www.unknowncheats.me/forum/c-and-c-/119210-xp-sp2-privileged-dll-injection.html
+      {
+      function CsrClientCallServer(
+      ApiMessage:pointer; //IN OUT CSR_API_MESSAGE*
+      CaptureBuffer:pointer; //IN OUT struct CSR_CAPTURE_BUFFER*
+      ApiNumber:ULONG;
+      DataLength:ULONG ): NTSTATUS; stdcall; external 'ntdll.dll';
+      }
 
 implementation
 
